@@ -1,0 +1,132 @@
+openapi: 3.0.3
+info:
+  title: Healthcare Appointment System API
+  description: |
+    Production-grade Healthcare Appointment API built with Node.js, Express, TypeScript, PostgreSQL (Prisma), Redis, Socket.io, and Razorpay.
+  version: 1.0.0
+  contact:
+    name: Engineering Team
+    email: support@healthcare.com
+
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local Development Server
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns health status of PostgreSQL, Redis, and API server with latencies.
+      tags:
+        - Health
+      responses:
+        '200':
+          description: All systems operational
+        '503':
+          description: Service degraded (DB or Redis down)
+
+  /auth/register:
+    post:
+      summary: Register Patient or Doctor
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, role]
+              properties:
+                name:
+                  type: string
+                  example: John Doe
+                email:
+                  type: string
+                  example: john@example.com
+                password:
+                  type: string
+                  example: Password123!
+                role:
+                  type: string
+                  enum: [PATIENT, DOCTOR]
+                  example: PATIENT
+      responses:
+        '201':
+          description: User registered successfully
+
+  /auth/login:
+    post:
+      summary: Login
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Returns accessToken and refreshToken
+
+  /doctors:
+    get:
+      summary: List/Search doctors with filters
+      tags:
+        - Doctors
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: specialization
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of doctors with pagination
+
+  /appointments:
+    post:
+      summary: Book an appointment (Redis Double-Booking Locked)
+      tags:
+        - Appointments
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, scheduledAt]
+              properties:
+                doctorId:
+                  type: string
+                scheduledAt:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Appointment booked successfully
+        '409':
+          description: Slot locked or already booked
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
