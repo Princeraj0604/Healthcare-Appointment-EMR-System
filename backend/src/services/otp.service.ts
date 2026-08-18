@@ -14,6 +14,7 @@ import logger from '../utils/logger';
 //   - Redis is NOT used for OTP; stored in DB for persistence
 //   - Old OTPs invalidated when new one is requested
 //   - 10 minute expiry by default
+//   - Dev mode support: '123456' master testing OTP + console log
 // ============================================================
 
 const OTP_LENGTH = env.OTP_LENGTH;
@@ -60,19 +61,24 @@ export async function sendOTP(
     },
   });
 
-  // Send email
-  await sendOTPEmail({
+  // Send email (non-blocking in development)
+  sendOTPEmail({
     to: userEmail,
     name: userName,
     otp, // Send plain OTP to user
     purpose,
+  }).catch((err) => {
+    logger.warn('Failed to send OTP email via SMTP:', err?.message || err);
   });
 
   logger.info(`OTP sent to user ${userId} for purpose: ${purpose}`);
 
-  // In development, log OTP to console for easy testing
+  // In development, always print OTP directly to console
   if (env.NODE_ENV === 'development') {
-    logger.debug(`[DEV ONLY] OTP for ${userEmail}: ${otp}`);
+    console.log(`\n==============================================`);
+    console.log(`🔑 [DEV OTP] Code for ${userEmail}: ${otp}`);
+    console.log(`💡 [DEV OTP] You can also enter: 123456`);
+    console.log(`==============================================\n`);
   }
 }
 
@@ -95,21 +101,29 @@ export async function verifyOTP(
     orderBy: { createdAt: 'desc' },
   });
 
-  if (!record) {
+  // In development mode, allow 123456 for fast testing
+  const isMasterDevOTP = env.NODE_ENV === 'development' && plainOTP === '123456';
+
+  if (!record && !isMasterDevOTP) {
     throw ApiError.badRequest('OTP is invalid or has expired. Please request a new one.');
   }
 
-  const isValid = await bcrypt.compare(plainOTP, record.otp);
+  let isValid = isMasterDevOTP;
+  if (!isValid && record) {
+    isValid = await bcrypt.compare(plainOTP, record.otp);
+  }
 
   if (!isValid) {
     throw ApiError.badRequest('Incorrect OTP. Please check and try again.');
   }
 
-  // Mark OTP as used
-  await prisma.oTPVerification.update({
-    where: { id: record.id },
-    data: { isUsed: true },
-  });
+  // Mark OTP as used if record exists
+  if (record) {
+    await prisma.oTPVerification.update({
+      where: { id: record.id },
+      data: { isUsed: true },
+    });
+  }
 
   logger.info(`OTP verified for user ${userId} [${purpose}]`);
 }
