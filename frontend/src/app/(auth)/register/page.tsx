@@ -46,24 +46,29 @@ function RegisterForm() {
 
     try {
       await authApi.register({
-        name,
-        email,
-        phone,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim() ? phone.trim() : undefined,
         password,
         role,
         ...(role === 'DOCTOR' && {
-          specialization,
-          qualification,
+          specialization: specialization.trim(),
+          qualification: qualification.trim(),
           experience: Number(experience),
           consultationFee: Number(consultationFee),
-          registrationNumber,
+          registrationNumber: registrationNumber.trim(),
         }),
       });
 
       // Open OTP modal upon successful registration
       setOtpModalOpen(true);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please verify your details.');
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        const fieldErrors = err.response.data.errors.map((e: any) => e.message).join(' • ');
+        setError(fieldErrors || 'Validation failed');
+      } else {
+        setError(err.response?.data?.message || 'Registration failed. Please verify your details.');
+      }
     } finally {
       setLoading(false);
     }
