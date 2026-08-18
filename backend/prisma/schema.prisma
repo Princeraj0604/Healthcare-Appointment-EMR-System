@@ -1,8 +1,3 @@
-// ============================================================
-// Healthcare Appointment System — Prisma Schema
-// Production-grade database design
-// ============================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,9 +8,234 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ============================================================
-// ENUMS
-// ============================================================
+model User {
+  id               String            @id @default(cuid())
+  name             String
+  email            String            @unique
+  phone            String?           @unique
+  passwordHash     String            @map("password_hash")
+  role             Role              @default(PATIENT)
+  avatar           String?
+  isVerified       Boolean           @default(false) @map("is_verified")
+  isActive         Boolean           @default(true) @map("is_active")
+  lastLoginAt      DateTime?         @map("last_login_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  doctor           Doctor?
+  notifications    Notification[]
+  otpVerifications OTPVerification[]
+  patient          Patient?
+  refreshTokens    RefreshToken[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@map("users")
+}
+
+model Doctor {
+  id                 String               @id @default(cuid())
+  userId             String               @unique @map("user_id")
+  specialization     String
+  qualification      String
+  experience         Int
+  bio                String?
+  consultationFee    Decimal              @map("consultation_fee") @db.Decimal(10, 2)
+  avgRating          Float                @default(0) @map("avg_rating")
+  totalReviews       Int                  @default(0) @map("total_reviews")
+  isApproved         Boolean              @default(false) @map("is_approved")
+  registrationNumber String               @unique @map("registration_number")
+  clinicAddress      String?              @map("clinic_address")
+  clinicLat          Float?               @map("clinic_lat")
+  clinicLng          Float?               @map("clinic_lng")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  appointments       Appointment[]
+  availability       DoctorAvailability[]
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicalRecords     MedicalRecord[]
+  reviews            Review[]
+
+  @@index([specialization])
+  @@index([isApproved])
+  @@index([avgRating])
+  @@map("doctors")
+}
+
+model Patient {
+  id                String          @id @default(cuid())
+  userId            String          @unique @map("user_id")
+  dateOfBirth       DateTime?       @map("date_of_birth")
+  gender            Gender?
+  bloodGroup        BloodGroup?     @map("blood_group")
+  address           String?
+  emergencyContact  String?         @map("emergency_contact")
+  allergies         String[]        @default([])
+  chronicConditions String[]        @default([]) @map("chronic_conditions")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  appointments      Appointment[]
+  medicalRecords    MedicalRecord[]
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews           Review[]
+
+  @@map("patients")
+}
+
+model DoctorAvailability {
+  id           String    @id @default(cuid())
+  doctorId     String    @map("doctor_id")
+  dayOfWeek    DayOfWeek @map("day_of_week")
+  startTime    String    @map("start_time")
+  endTime      String    @map("end_time")
+  slotDuration Int       @default(30) @map("slot_duration")
+  isActive     Boolean   @default(true) @map("is_active")
+  breakStart   String?   @map("break_start")
+  breakEnd     String?   @map("break_end")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  doctor       Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek])
+  @@index([doctorId])
+  @@map("doctor_availability")
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  patientId     String            @map("patient_id")
+  doctorId      String            @map("doctor_id")
+  scheduledAt   DateTime          @map("scheduled_at")
+  duration      Int               @default(30)
+  status        AppointmentStatus @default(PENDING)
+  type          AppointmentType   @default(IN_PERSON)
+  symptoms      String?
+  notes         String?
+  cancelReason  String?           @map("cancel_reason")
+  cancelledBy   String?           @map("cancelled_by")
+  cancelledAt   DateTime?         @map("cancelled_at")
+  paymentStatus PaymentStatus     @default(PENDING) @map("payment_status")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  doctor        Doctor            @relation(fields: [doctorId], references: [id])
+  patient       Patient           @relation(fields: [patientId], references: [id])
+  medicalRecord MedicalRecord?
+  payment       Payment?
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([doctorId, scheduledAt])
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique @map("appointment_id")
+  patientId     String      @map("patient_id")
+  doctorId      String      @map("doctor_id")
+  diagnosis     String
+  prescription  String?
+  labReports    String[]    @default([]) @map("lab_reports")
+  notes         String?
+  followUpDate  DateTime?   @map("follow_up_date")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  doctor        Doctor      @relation(fields: [doctorId], references: [id])
+  patient       Patient     @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@map("medical_records")
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  patientId     String   @map("patient_id")
+  doctorId      String   @map("doctor_id")
+  appointmentId String   @unique @map("appointment_id")
+  rating        Int
+  comment       String?
+  isPublic      Boolean  @default(true) @map("is_public")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  doctor        Doctor   @relation(fields: [doctorId], references: [id])
+  patient       Patient  @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@map("reviews")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  title     String
+  message   String
+  type      NotificationType @default(GENERAL)
+  isRead    Boolean          @default(false) @map("is_read")
+  metadata  Json?
+  createdAt DateTime         @default(now()) @map("created_at")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Payment {
+  id                String         @id @default(cuid())
+  appointmentId     String         @unique @map("appointment_id")
+  amount            Decimal        @db.Decimal(10, 2)
+  currency          String         @default("INR")
+  razorpayOrderId   String?        @unique @map("razorpay_order_id")
+  razorpayPaymentId String?        @unique @map("razorpay_payment_id")
+  razorpaySignature String?        @map("razorpay_signature")
+  status            PaymentStatus  @default(PENDING)
+  method            PaymentMethod?
+  refundId          String?        @map("refund_id")
+  refundAmount      Decimal?       @map("refund_amount") @db.Decimal(10, 2)
+  refundedAt        DateTime?      @map("refunded_at")
+  failureReason     String?        @map("failure_reason")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  appointment       Appointment    @relation(fields: [appointmentId], references: [id])
+
+  @@index([status])
+  @@map("payments")
+}
+
+model OTPVerification {
+  id        String     @id @default(cuid())
+  userId    String     @map("user_id")
+  otp       String
+  purpose   OTPPurpose
+  expiresAt DateTime   @map("expires_at")
+  isUsed    Boolean    @default(false) @map("is_used")
+  createdAt DateTime   @default(now()) @map("created_at")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("otp_verifications")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
 
 enum Role {
   PATIENT
@@ -24,11 +244,11 @@ enum Role {
 }
 
 enum AppointmentStatus {
-  PENDING      // Just booked, awaiting doctor confirmation
-  CONFIRMED    // Doctor confirmed
-  CANCELLED    // Cancelled by patient or doctor
-  COMPLETED    // Appointment done
-  NO_SHOW      // Patient didn't show up
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
 }
 
 enum AppointmentType {
@@ -94,276 +314,4 @@ enum BloodGroup {
   AB_NEGATIVE
   O_POSITIVE
   O_NEGATIVE
-}
-
-// ============================================================
-// MODELS
-// ============================================================
-
-model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  phone        String?  @unique
-  passwordHash String   @map("password_hash")
-  role         Role     @default(PATIENT)
-  avatar       String?
-  isVerified   Boolean  @default(false) @map("is_verified")
-  isActive     Boolean  @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  doctor          Doctor?
-  patient         Patient?
-  notifications   Notification[]
-  otpVerifications OTPVerification[]
-  refreshTokens   RefreshToken[]
-
-  @@index([email])
-  @@index([phone])
-  @@index([role])
-  @@map("users")
-}
-
-model Doctor {
-  id                 String  @id @default(cuid())
-  userId             String  @unique @map("user_id")
-  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  specialization     String
-  qualification      String   // e.g. "MBBS, MD"
-  experience         Int      // years
-  bio                String?  @db.Text
-  consultationFee    Decimal  @map("consultation_fee") @db.Decimal(10, 2)
-  avgRating          Float    @default(0) @map("avg_rating")
-  totalReviews       Int      @default(0) @map("total_reviews")
-  isApproved         Boolean  @default(false) @map("is_approved")
-  registrationNumber String   @unique @map("registration_number")
-  clinicAddress      String?  @map("clinic_address")
-  clinicLat          Float?   @map("clinic_lat")
-  clinicLng          Float?   @map("clinic_lng")
-
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  // Relations
-  availability   DoctorAvailability[]
-  appointments   Appointment[]
-  reviews        Review[]
-  medicalRecords MedicalRecord[]
-
-  @@index([specialization])
-  @@index([isApproved])
-  @@index([avgRating])
-  @@map("doctors")
-}
-
-model Patient {
-  id               String     @id @default(cuid())
-  userId           String     @unique @map("user_id")
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  dateOfBirth      DateTime?  @map("date_of_birth")
-  gender           Gender?
-  bloodGroup       BloodGroup? @map("blood_group")
-  address          String?
-  emergencyContact String?    @map("emergency_contact")
-  allergies        String[]   @default([])
-  chronicConditions String[]  @default([]) @map("chronic_conditions")
-
-  createdAt        DateTime   @default(now()) @map("created_at")
-  updatedAt        DateTime   @updatedAt @map("updated_at")
-
-  // Relations
-  appointments   Appointment[]
-  medicalRecords MedicalRecord[]
-  reviews        Review[]
-
-  @@map("patients")
-}
-
-// Doctor's weekly availability template
-model DoctorAvailability {
-  id           String    @id @default(cuid())
-  doctorId     String    @map("doctor_id")
-  doctor       Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-
-  dayOfWeek    DayOfWeek @map("day_of_week")
-  startTime    String    @map("start_time")   // "09:00" (HH:MM 24-hour)
-  endTime      String    @map("end_time")     // "17:00"
-  slotDuration Int       @default(30) @map("slot_duration") // minutes
-  isActive     Boolean   @default(true) @map("is_active")
-
-  // Break time (optional)
-  breakStart   String?   @map("break_start")  // "13:00"
-  breakEnd     String?   @map("break_end")    // "14:00"
-
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-
-  @@unique([doctorId, dayOfWeek])
-  @@index([doctorId])
-  @@map("doctor_availability")
-}
-
-model Appointment {
-  id          String            @id @default(cuid())
-  patientId   String            @map("patient_id")
-  patient     Patient           @relation(fields: [patientId], references: [id])
-  doctorId    String            @map("doctor_id")
-  doctor      Doctor            @relation(fields: [doctorId], references: [id])
-
-  scheduledAt DateTime          @map("scheduled_at")   // exact datetime of appointment
-  duration    Int               @default(30)            // minutes
-  status      AppointmentStatus @default(PENDING)
-  type        AppointmentType   @default(IN_PERSON)
-
-  symptoms    String?           @db.Text
-  notes       String?           @db.Text              // doctor's internal notes
-  
-  // Cancellation
-  cancelReason String?          @map("cancel_reason")
-  cancelledBy  String?          @map("cancelled_by")   // userId who cancelled
-  cancelledAt  DateTime?        @map("cancelled_at")
-
-  paymentStatus PaymentStatus   @default(PENDING) @map("payment_status")
-
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
-
-  // Relations
-  medicalRecord MedicalRecord?
-  payment       Payment?
-
-  @@index([patientId])
-  @@index([doctorId])
-  @@index([scheduledAt])
-  @@index([status])
-  @@index([doctorId, scheduledAt]) // For slot conflict checking
-  @@map("appointments")
-}
-
-model MedicalRecord {
-  id            String      @id @default(cuid())
-  appointmentId String      @unique @map("appointment_id")
-  appointment   Appointment @relation(fields: [appointmentId], references: [id])
-  patientId     String      @map("patient_id")
-  patient       Patient     @relation(fields: [patientId], references: [id])
-  doctorId      String      @map("doctor_id")
-  doctor        Doctor      @relation(fields: [doctorId], references: [id])
-
-  diagnosis     String      @db.Text
-  prescription  String?     @db.Text
-  labReports    String[]    @default([]) @map("lab_reports") // file URLs
-  notes         String?     @db.Text
-  followUpDate  DateTime?   @map("follow_up_date")
-
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-
-  @@index([patientId])
-  @@index([doctorId])
-  @@map("medical_records")
-}
-
-model Review {
-  id            String   @id @default(cuid())
-  patientId     String   @map("patient_id")
-  patient       Patient  @relation(fields: [patientId], references: [id])
-  doctorId      String   @map("doctor_id")
-  doctor        Doctor   @relation(fields: [doctorId], references: [id])
-  appointmentId String   @unique @map("appointment_id") // One review per appointment
-
-  rating        Int      // 1–5
-  comment       String?  @db.Text
-  isPublic      Boolean  @default(true) @map("is_public")
-
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  @@index([doctorId])
-  @@index([patientId])
-  @@map("reviews")
-}
-
-model Notification {
-  id        String           @id @default(cuid())
-  userId    String           @map("user_id")
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title     String
-  message   String           @db.Text
-  type      NotificationType @default(GENERAL)
-  isRead    Boolean          @default(false) @map("is_read")
-  metadata  Json?            // Extra data (appointmentId, etc.)
-
-  createdAt DateTime         @default(now()) @map("created_at")
-
-  @@index([userId, isRead])
-  @@index([userId, createdAt])
-  @@map("notifications")
-}
-
-model Payment {
-  id                String        @id @default(cuid())
-  appointmentId     String        @unique @map("appointment_id")
-  appointment       Appointment   @relation(fields: [appointmentId], references: [id])
-
-  amount            Decimal       @db.Decimal(10, 2)
-  currency          String        @default("INR")
-
-  razorpayOrderId   String?       @unique @map("razorpay_order_id")
-  razorpayPaymentId String?       @unique @map("razorpay_payment_id")
-  razorpaySignature String?       @map("razorpay_signature")
-
-  status            PaymentStatus @default(PENDING)
-  method            PaymentMethod?
-
-  refundId          String?       @map("refund_id")
-  refundAmount      Decimal?      @map("refund_amount") @db.Decimal(10, 2)
-  refundedAt        DateTime?     @map("refunded_at")
-
-  failureReason     String?       @map("failure_reason")
-
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-
-  @@index([status])
-  @@map("payments")
-}
-
-model OTPVerification {
-  id        String     @id @default(cuid())
-  userId    String     @map("user_id")
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  otp       String     // Hashed OTP
-  purpose   OTPPurpose
-  expiresAt DateTime   @map("expires_at")
-  isUsed    Boolean    @default(false) @map("is_used")
-
-  createdAt DateTime   @default(now()) @map("created_at")
-
-  @@index([userId, purpose])
-  @@map("otp_verifications")
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  isRevoked Boolean  @default(false) @map("is_revoked")
-  userAgent String?  @map("user_agent")
-  ipAddress String?  @map("ip_address")
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([userId])
-  @@index([token])
-  @@map("refresh_tokens")
 }
